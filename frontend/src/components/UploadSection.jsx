@@ -267,7 +267,7 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
                 onClick={resetFiles}
                 className="text-[10px] uppercase tracking-widest text-slate-400 hover:text-rose-500 font-bold transition-colors"
               >
-                Formanı Təmizlə
+                Sil
               </button>
             )}
             <div className="flex items-center gap-1.5">

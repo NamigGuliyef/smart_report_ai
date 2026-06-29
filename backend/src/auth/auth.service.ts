@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { User } from 'src/user/model/user.schema';
 import { Model } from 'mongoose';
@@ -24,11 +24,11 @@ export class AuthService {
     async login(email: string, password: string) {
         const user = await this.userModel.findOne({ email });
         if (!user) {
-            throw new Error('İstifadəçi tapılmadı');
+            throw new NotFoundException('İstifadəçi tapılmadı');
         }
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
-            throw new Error('Şifrə yanlışdır');
+            throw new BadRequestException('Şifrə yanlışdır');
         }
 
         const token = jwt.sign({ _id: user._id, email: user.email }, "inventory_ai_auditor_secret_key", { expiresIn: '8h' });
