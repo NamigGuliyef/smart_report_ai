@@ -54,7 +54,7 @@ const App = () => {
   const fetchAllAudits = useCallback(async () => {
     if (!user?._id) return;
     try {
-      const res = await fetch(`http://localhost:8100/analys/all/${user._id}`);
+      const res = await fetch(`/api/analys/all/${user._id}`);
       if (res.ok) {
         const data = await res.json();
         setAllAudits(data);
@@ -69,7 +69,7 @@ const App = () => {
     if (!user?._id) return;
     setIsDashboardLoading(true);
     try {
-      const res = await fetch(`http://localhost:8100/user/last-comparison/${user._id}`);
+      const res = await fetch(`/api/user/last-comparison/${user._id}`);
       if (res.ok) {
         const stats = await res.json();
         if (stats.hasData) {
@@ -167,7 +167,7 @@ const App = () => {
     }, 1000);
 
     try {
-      const res = await fetch('http://localhost:8100/analys/upload', {
+      const res = await fetch('/api/analys/upload', {
         method: 'POST',
         body: formData,
       });
@@ -225,7 +225,7 @@ const App = () => {
 
   const handleDeleteAudit = async (auditId) => {
     try {
-      const res = await fetch(`http://localhost:8100/user/${auditId}`, {
+      const res = await fetch(`/api/user/${auditId}`, {
         method: 'DELETE',
       });
 
@@ -484,7 +484,7 @@ const App = () => {
                                 <Trash2 size={16} />
                               </button>
                               <a
-                                href={`http://localhost:8100/analys/download/${audit._id}`}
+                                href={`/api/analys/download/${audit._id}`}
                                 onClick={(e) => e.stopPropagation()}
                                 className="p-2.5 hover:bg-emerald-100 text-emerald-600 rounded-xl transition-all hover:scale-110 active:scale-95 bg-emerald-50 border border-emerald-100 shadow-sm"
                                 title="Excel olaraq yüklə"
