@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as ExcelJS from 'exceljs';
@@ -38,7 +38,7 @@ export class AnalysService {
       return result.text || '';
     } catch (error: any) {
       console.error('PDF parsing error:', error);
-      throw new Error(
+      throw new BadRequestException(
         'PDF faylı oxunarkən xəta baş verdi: ' +
           (error instanceof Error ? error.message : String(error)),
       );
@@ -204,18 +204,9 @@ JSON Strukturu:
         : `Fiziki (Excel): ${JSON.stringify(physData)}`;
     }
 
-    // Dəstəklənən modellər:
-    // 1. Claude Haiku: "claude-haiku-4-5-20251001"
-    // 2. Claude Sonnet 4.5: "claude-sonnet-4-5-20250929"
-    // 3. Claude Sonnet 4.6: "claude-sonnet-4-6"
-    const allowedModels = [
-      'claude-haiku-4-5-20251001',
-      'claude-sonnet-4-5-20250929',
-      'claude-sonnet-4-6',
-    ];
-    const modelToUse = allowedModels.includes(selectedModel)
-      ? selectedModel
-      : 'claude-sonnet-4-6';
+    // Dəstəklənən model: yalnız Claude Sonnet 4.6
+    const allowedModels = ['claude-sonnet-4-6'];
+    const modelToUse = selectedModel === 'claude-sonnet-4-6' ? 'claude-sonnet-4-6' : 'claude-sonnet-4-6';
 
     const response = await this.anthropic.messages.create({
       model: modelToUse,
@@ -231,7 +222,7 @@ JSON Strukturu:
     const firstBrace = rawText.indexOf('{');
     const lastBrace = rawText.lastIndexOf('}');
     if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
-      throw new Error('Claude cavabında düzgün JSON formatı tapılmadı');
+      throw new NotFoundException('Claude cavabında düzgün JSON formatı tapılmadı');
     }
     const cleanJson = rawText.substring(firstBrace, lastBrace + 1);
     const aiResult = JSON.parse(cleanJson);
@@ -278,7 +269,7 @@ JSON Strukturu:
   async exportToExcel(id: string) {
     const audit = await this.analysModel.findById(id);
     if (!audit || !audit.dataContent || !audit.dataContent.discrepancies) {
-      throw new Error('Audit tapılmadı və ya məlumat yoxdur');
+      throw new NotFoundException('Audit tapılmadı və ya məlumat yoxdur');
     }
 
     const workbook = new ExcelJS.Workbook();

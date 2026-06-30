@@ -13,7 +13,7 @@ export class AuthService {
     async register(name: string, email: string, password: string) {
         const user = await this.userModel.findOne({ email });
         if (user) {
-            throw new Error('Bu email ilə istifadəçi artıq mövcuddur');
+            throw new BadRequestException('Bu email ilə istifadəçi artıq mövcuddur');
         }
         const hashedPassword = await bcrypt.hash(password, 10);
         return await this.userModel.create({ name, email, password: hashedPassword });

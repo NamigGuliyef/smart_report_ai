@@ -231,9 +231,7 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
                     disabled={isAuditing}
                     className="bg-transparent border-none text-[10px] font-black text-slate-700 focus:ring-0 cursor-pointer py-0 pr-5 pl-0 truncate"
                   >
-                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5-Standard</option>
-                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5-Standard</option>
-                    <option value="claude-sonnet-4-6">Claude Sonnet 4.6-Expert</option>
+                    <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
                   </select>
                 </div>
 
@@ -339,8 +337,6 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
               <div>
                 <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2">🤖 AI Modelləri</h4>
                 <ul className="space-y-1.5 ml-1">
-                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Claude Haiku 4.5 (Standard):</strong> Sürətli cavab verir, sadə və orta mürəkkəblikli analizlər üçün idealdır. Daha az token xərcləyir.</span></li>
-                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Claude Sonnet 4.5 (Standard):</strong> Daha dərin və dəqiq analiz edir. Böyük və mürəkkəb cədvəllər, detallı müqayisələr üçün tövsiyə olunur.</span></li>
                   <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Claude Sonnet 4.6 (Expert):</strong> Ən yüksək dəqiqlik və performans. Xüsusilə mürəkkəb xüsusi tələbatlar (custom prompts) və çoxlu kateqoriyalı analizlər üçün ən yaxşı seçimdir.</span></li>
                 </ul>
               </div>

@@ -39,7 +39,7 @@ const AuthPage = ({ onLogin }) => {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.message || 'Xəta baş verdi');
+                throw new BadRequestException(data.message || 'Xəta baş verdi');
             }
 
             // If login/register is successful

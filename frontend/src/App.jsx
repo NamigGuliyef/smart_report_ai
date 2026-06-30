@@ -36,7 +36,7 @@ const App = () => {
   const [toastMessage, setToastMessage] = useState('');
 
   // Model selection
-  const [selectedModel, setSelectedModel] = useState('claude-haiku-4-5-20251001');
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
 
   // Real data from API responses
   const [auditResult, setAuditResult] = useState(null); // latest API response
@@ -176,7 +176,7 @@ const App = () => {
       setAuditProgress(100);
 
       if (!res.ok) {
-        throw new Error(`Server xətası: ${res.status}`);
+        throw new BadRequestException(`Server xətası: ${res.status}`);
       }
 
       const result = await res.json();
@@ -230,7 +230,7 @@ const App = () => {
       });
 
       if (!res.ok) {
-        throw new Error(`Silinmə uğursuz oldu: ${res.status}`);
+        throw new BadRequestException(`Silinmə uğursuz oldu: ${res.status}`);
       }
 
       await fetchAllAudits();
@@ -467,7 +467,7 @@ const App = () => {
                               )}
                               {audit.metadata?.model && (
                                 <span className="text-[10px] bg-slate-100/80 text-slate-650 border border-slate-200 px-2.5 py-1 rounded-md font-extrabold">
-                                  {audit.metadata.model === 'claude-haiku-4-5-20251001' ? 'Claude Haiku' : 'Claude Sonnet'}
+                                  {'Claude Sonnet'}
                                 </span>
                               )}
                               <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-100">
