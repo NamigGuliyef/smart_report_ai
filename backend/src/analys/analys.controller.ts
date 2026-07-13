@@ -24,24 +24,27 @@ export class AnalysController {
       { name: 'physicalFile', maxCount: 1 },
     ]),
   )
-    async uploadFiles(
-      @UploadedFiles() files: any,
+  async uploadFiles(
+    @UploadedFiles() files: any,
     @Body('customPrompt') customPrompt?: string,
     @Body('model') model?: string,
     @Body('userId') userId?: string,
     @Body('userName') userName?: string,
   ) {
-    if (!files || (!files.systemFile && !files.physicalFile)) {
-      throw new BadRequestException('Ən azı bir fayl (Sistem və ya Fiziki) yüklənməlidir!');
+    const hasFiles = !!files?.systemFile?.length || !!files?.physicalFile?.length;
+    const hasPrompt = !!customPrompt?.trim();
+
+    if (!hasFiles && !hasPrompt) {
+      throw new BadRequestException('Ən azı bir fayl yükləyin və ya xüsusi təlimat verin.');
     }
 
-    const systemFile = files.systemFile ? files.systemFile[0] : null;
-    const physicalFile = files.physicalFile ? files.physicalFile[0] : null;
+    const systemFile = files?.systemFile ? files.systemFile[0] : null;
+    const physicalFile = files?.physicalFile ? files.physicalFile[0] : null;
 
     return await this.analysService.processFiles(
       systemFile?.buffer,
       physicalFile?.buffer,
-      systemFile?.originalname || physicalFile?.originalname || 'Audit',
+      systemFile?.originalname || physicalFile?.originalname || 'Prompt-based Audit',
       userName || 'Test User',
       customPrompt,
       model,

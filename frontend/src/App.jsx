@@ -43,6 +43,7 @@ const App = () => {
   const [allAudits, setAllAudits] = useState([]); // all audits from DB
   const [selectedAudit, setSelectedAudit] = useState(null); // selected audit for detail view
   const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [isComparisonMode, setIsComparisonMode] = useState(false);
 
   const latestAudit = allAudits?.length
     ? allAudits.reduce((latest, audit) => {
@@ -131,6 +132,8 @@ const App = () => {
 
   // Audit Trigger Handler — real API call
   const handleAuditStart = async (systemFileObj, physicalFileObj, customPrompt, selectedModel) => {
+    const isTwoFileComparison = Boolean(systemFileObj && physicalFileObj);
+    setIsComparisonMode(isTwoFileComparison);
     setIsAuditing(true);
     setAuditProgress(0);
     setAuditStep(t.auditLogs[0]);
@@ -185,15 +188,21 @@ const App = () => {
 
       // Update dashboard
       const aiData = result.dataContent;
-      if (aiData && (!customPrompt || !customPrompt.trim())) {
+      if (aiData && isTwoFileComparison) {
         setDiscrepancies(aiData.discrepancies?.length ?? 0);
         setAccuracy(aiData.data_quality_score ?? 0);
         setTotalItems(aiData.discrepancies?.length ?? 0);
+      } else {
+        setDiscrepancies(0);
+        setAccuracy(0);
+        setTotalItems(0);
       }
 
       setToastMessage(
         customPrompt && customPrompt.trim()
-          ? "Xüsusi analiz uğurla tamamlandı! Nəticəni 'Hesabatlar' bölməsindən görə bilərsiniz."
+          ? (!systemFileObj && !physicalFileObj
+            ? "Xüsusi təlimat əsasında cədvəl uğurla yaradıldı!"
+            : "Xüsusi analiz uğurla tamamlandı! Nəticəni 'Hesabatlar' bölməsindən görə bilərsiniz.")
           : t.toastSuccess
       );
       setShowToast(true);
@@ -354,11 +363,16 @@ const App = () => {
                     accuracy={accuracy}
                     discrepancies={discrepancies}
                     isLoading={isDashboardLoading}
+                    showComparisonMetrics={isComparisonMode}
                   />
                 </div>
                 {/* Accuracy Doughnut Chart */}
                 <div className="lg:col-span-4">
-                  <AccuracyChart accuracy={accuracy} isInitial={!auditResult} />
+                  <AccuracyChart
+                    accuracy={accuracy}
+                    isInitial={!isComparisonMode}
+                    showComparisonMetrics={isComparisonMode}
+                  />
                 </div>
               </div>
 

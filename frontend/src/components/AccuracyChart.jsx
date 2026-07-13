@@ -1,7 +1,9 @@
 import React from 'react';
 
-const AccuracyChart = ({ accuracy = 0, isInitial = false }) => {
-  const discrepancy = isInitial ? 0 : Math.max(0, 100 - accuracy);
+const AccuracyChart = ({ accuracy = 0, isInitial = false, showComparisonMetrics = false }) => {
+  const isActive = showComparisonMetrics && !isInitial;
+  const displayAccuracy = isActive ? accuracy : 0;
+  const discrepancy = isActive ? Math.max(0, 100 - displayAccuracy) : 0;
 
   // SVG Circle parameters
   const radius = 70;
@@ -9,7 +11,7 @@ const AccuracyChart = ({ accuracy = 0, isInitial = false }) => {
   const circumference = 2 * Math.PI * radius; // ~439.82
 
   // Calculate dash offset for green (accuracy)
-  const accuracyStrokeLength = (accuracy / 100) * circumference;
+  const accuracyStrokeLength = (displayAccuracy / 100) * circumference;
   const accuracyStrokeOffset = circumference - accuracyStrokeLength;
 
   return (
@@ -19,16 +21,16 @@ const AccuracyChart = ({ accuracy = 0, isInitial = false }) => {
         <div>
           <span className="text-slate-500 font-medium text-sm block">Dəqiqlik Bölgüsü</span>
           <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-150 inline-block mt-1">
-            {isInitial ? 'Gözləmədə' : 'Canlı Status'}
+            {isActive ? 'Canlı Status' : 'Gözləmədə'}
           </span>
         </div>
         <div className="flex flex-col gap-1 mt-2">
           <div className="flex items-center gap-1.5">
-            <span className={`w-2.5 h-2.5 rounded-md ${isInitial ? 'bg-slate-300' : 'bg-emerald-500'} shadow-sm`}></span>
-            <span className="text-xs font-semibold text-slate-600">Dəqiqlik: {accuracy}%</span>
+            <span className={`w-2.5 h-2.5 rounded-md ${isActive ? 'bg-emerald-500' : 'bg-slate-300'} shadow-sm`}></span>
+            <span className="text-xs font-semibold text-slate-600">Dəqiqlik: {displayAccuracy}%</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={`w-2.5 h-2.5 rounded-md ${isInitial ? 'bg-slate-200' : 'bg-rose-500'} shadow-sm`}></span>
+            <span className={`w-2.5 h-2.5 rounded-md ${isActive ? 'bg-rose-500' : 'bg-slate-200'} shadow-sm`}></span>
             <span className="text-xs font-semibold text-slate-650">Fərqlilik: {discrepancy}%</span>
           </div>
         </div>
@@ -47,12 +49,12 @@ const AccuracyChart = ({ accuracy = 0, isInitial = false }) => {
             cy="45"
             r="32"
             fill="transparent"
-            stroke={isInitial ? "#e2e8f0" : "#f43f5e"} /* slate-200 or rose-500 */
+            stroke={isActive ? "#f43f5e" : "#e2e8f0"} /* rose-500 or slate-200 */
             strokeWidth="10"
           />
 
           {/* Foreground circle (Green / Accuracy) */}
-          {!isInitial && (
+          {isActive && (
             <circle
               cx="45"
               cy="45"
@@ -61,7 +63,7 @@ const AccuracyChart = ({ accuracy = 0, isInitial = false }) => {
               stroke="#10b981" /* emerald-500 */
               strokeWidth="10"
               strokeDasharray={2 * Math.PI * 32}
-              strokeDashoffset={(2 * Math.PI * 32) - ((accuracy / 100) * (2 * Math.PI * 32))}
+              strokeDashoffset={(2 * Math.PI * 32) - ((displayAccuracy / 100) * (2 * Math.PI * 32))}
               strokeLinecap="butt"
               className="transition-all duration-1000 ease-out"
             />
@@ -70,7 +72,7 @@ const AccuracyChart = ({ accuracy = 0, isInitial = false }) => {
 
         {/* Center Percentage Label */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pr-2 pointer-events-none">
-          <span className="text-sm font-black text-slate-800">{accuracy}%</span>
+          <span className="text-sm font-black text-slate-800">{displayAccuracy}%</span>
         </div>
       </div>
     </div>

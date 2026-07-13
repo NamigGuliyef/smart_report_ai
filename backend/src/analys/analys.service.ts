@@ -65,6 +65,47 @@ export class AnalysService {
     return { data, headers };
   }
 
+  private async parseClaudeJsonResponse(response: any) {
+    const textBlock = response.content.find((block: any) => block.type === 'text');
+    if (!textBlock || !textBlock.text) {
+      throw new NotFoundException('Claude cavabında mətn tapılmadı');
+    }
+
+    let rawText = textBlock.text.trim();
+    const firstBrace = rawText.indexOf('{');
+    const lastBrace = rawText.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
+      throw new NotFoundException('Claude cavabında düzgün JSON formatı tapılmadı');
+    }
+
+    const cleanJson = rawText.substring(firstBrace, lastBrace + 1);
+    return JSON.parse(cleanJson);
+  }
+
+  private async createPromptOnlyTable(customPrompt: string, selectedModel: string) {
+    const response = await this.anthropic.messages.create({
+      model: selectedModel,
+      max_tokens: 12000,
+      system: `Sən peşəkar bir hesabat və cədvəl yaradıcısan. İstifadəçinin istəyinə uyğun təmiz, oxunaqlı və strukturlaşdırılmış cədvəl hazırlamalısan.`,
+      messages: [{
+        role: 'user',
+        content: `İstifadəçinin tələbi: ${customPrompt}
+
+Yalnız və yalnız JSON formatında cavab ver. JSON strukturu:
+{
+  "context": "Cədvəlin qısa başlığı",
+  "discrepancies": [
+    {"Sütun 1": "Dəyər", "Sütun 2": "Dəyər"}
+  ],
+  "recommendations": ["Tövsiyə 1"],
+  "data_quality_score": 100
+}`,
+      }],
+    });
+
+    return this.parseClaudeJsonResponse(response);
+  }
+
   // Əsas funksiya: Faylları emal edir
   async processFiles(
     sysBuffer?: Buffer,
@@ -75,6 +116,35 @@ export class AnalysService {
     selectedModel?: string,
     userId?: string,
   ) {
+    const hasAnyFiles = Boolean(sysBuffer || physBuffer);
+    const hasPrompt = Boolean(customPrompt && customPrompt.trim());
+
+    if (!hasAnyFiles && !hasPrompt) {
+      throw new BadRequestException('Ən azı bir fayl yükləyin və ya xüsusi təlimat verin.');
+    }
+
+    const modelToUse = selectedModel === 'claude-sonnet-4-6' ? 'claude-sonnet-4-6' : 'claude-sonnet-4-6';
+
+    if (!hasAnyFiles && hasPrompt) {
+      const aiResult = await this.createPromptOnlyTable(customPrompt, modelToUse);
+      aiResult.data_quality_score = Math.max(0, Math.min(100, aiResult.data_quality_score ?? 100));
+
+      const auditEntry = new this.analysModel({
+        fileName: fileName || 'Prompt-based Audit',
+        dataContent: aiResult,
+        metadata: {
+          columnNames: aiResult.discrepancies?.length ? Object.keys(aiResult.discrepancies[0]) : ['Sütun 1'],
+          user,
+          userId,
+          customPrompt,
+          model: modelToUse,
+        },
+        status: 'Təsdiqləndi',
+      });
+
+      return await auditEntry.save();
+    }
+
     // 1. Faylları parçala
     let sysData: any[] = [];
     let sysHeaders: string[] = [];
@@ -203,10 +273,6 @@ JSON Strukturu:
         ? `Fiziki (PDF): ${physPdfText}`
         : `Fiziki (Excel): ${JSON.stringify(physData)}`;
     }
-
-    // Dəstəklənən model: yalnız Claude Sonnet 4.6
-    const allowedModels = ['claude-sonnet-4-6'];
-    const modelToUse = selectedModel === 'claude-sonnet-4-6' ? 'claude-sonnet-4-6' : 'claude-sonnet-4-6';
 
     const response = await this.anthropic.messages.create({
       model: modelToUse,

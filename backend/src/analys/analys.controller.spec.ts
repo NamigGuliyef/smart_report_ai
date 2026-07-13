@@ -1,20 +1,33 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { AnalysController } from './analys.controller';
-import { AnalysService } from './analys.service';
+import { BadRequestException } from '@nestjs/common';
 
 describe('AnalysController', () => {
-  let controller: AnalysController;
+  it('should allow prompt-only requests without uploaded files', async () => {
+    const service = {
+      processFiles: jest.fn().mockResolvedValue({ ok: true }),
+    };
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [AnalysController],
-      providers: [AnalysService],
-    }).compile();
+    const controller = new AnalysController(service as any);
 
-    controller = module.get<AnalysController>(AnalysController);
+    await expect(
+      controller.uploadFiles(undefined, 'Mənə 3 sətirli satış cədvəli hazırlayın', 'claude-sonnet-4-6'),
+    ).resolves.toEqual({ ok: true });
+
+    expect(service.processFiles).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      'Prompt-based Audit',
+      'Test User',
+      'Mənə 3 sətirli satış cədvəli hazırlayın',
+      'claude-sonnet-4-6',
+      undefined,
+    );
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('should reject requests with neither files nor prompt', async () => {
+    const service = { processFiles: jest.fn() };
+    const controller = new AnalysController(service as any);
+
+    await expect(controller.uploadFiles(undefined, '', undefined)).rejects.toBeInstanceOf(BadRequestException);
   });
 });

@@ -52,11 +52,11 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
   };
 
   const handleAuditClick = () => {
-    if (!systemFile && !physicalFile) {
-      alert('Ən azı bir fayl (Sistem və ya Fiziki) yükləyin!');
+    const hasPrompt = customPrompt && customPrompt.trim();
+    if (!systemFile && !physicalFile && !hasPrompt) {
+      alert('Ən azı bir fayl yükləyin və ya xüsusi təlimat yazın.');
       return;
     }
-    // Pass actual File objects, the custom prompt, and the selected model to the parent
     onAuditStart(systemFile, physicalFile, customPrompt, selectedModel);
   };
 
@@ -211,6 +211,7 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
             <label className="block text-xs font-bold text-slate-650 uppercase tracking-wide mb-1.5">
               Xüsusi Təlimat / Prompt (İxtiyari)
             </label>
+         
             <div className="relative flex-1 group">
               <textarea
                 value={customPrompt}

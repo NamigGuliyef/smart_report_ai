@@ -1,7 +1,7 @@
 import React from 'react';
 import { BarChart3, AlertTriangle } from 'lucide-react';
 
-const DashboardCards = ({ totalItems = 0, accuracy = 0, discrepancies = 0, isLoading = false }) => {
+const DashboardCards = ({ totalItems = 0, accuracy = 0, discrepancies = 0, isLoading = false, showComparisonMetrics = false }) => {
   // Skeleton Loading Component
   if (isLoading) {
     return (
@@ -31,6 +31,9 @@ const DashboardCards = ({ totalItems = 0, accuracy = 0, discrepancies = 0, isLoa
     );
   }
 
+  const displayAccuracy = showComparisonMetrics ? accuracy : 0;
+  const displayDiscrepancies = showComparisonMetrics ? discrepancies : 0;
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
       {/* Inventory Accuracy % Card */}
@@ -43,7 +46,7 @@ const DashboardCards = ({ totalItems = 0, accuracy = 0, discrepancies = 0, isLoa
         </div>
         <div className="mt-2">
           <span className="text-3xl md:text-4xl font-black text-emerald-650 tracking-tight">
-            {accuracy}%
+            {displayAccuracy}%
           </span>
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
@@ -59,7 +62,7 @@ const DashboardCards = ({ totalItems = 0, accuracy = 0, discrepancies = 0, isLoa
         </div>
         <div className="mt-2 flex items-baseline gap-2">
           <span className="text-3xl md:text-4xl font-black text-rose-600 tracking-tight animate-soft-pulse">
-            {discrepancies}
+            {displayDiscrepancies}
           </span>
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-rose-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
