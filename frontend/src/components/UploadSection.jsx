@@ -232,6 +232,7 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
                     disabled={isAuditing}
                     className="bg-transparent border-none text-[10px] font-black text-slate-700 focus:ring-0 cursor-pointer py-0 pr-5 pl-0 truncate"
                   >
+                    <option value="claude-sonnet-5">Claude Sonnet 5</option>
                     <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
                   </select>
                 </div>
@@ -271,7 +272,7 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
             )}
             <div className="flex items-center gap-1.5">
               <p className="text-[10px] text-slate-400 font-medium italic">
-                * Ən azı bir fayl seçilməlidir. Ətraflı məlumat üçün qaydaları oxuyun.
+                * Analiz üçün 1 fayl seçilməlidir. Ətraflı məlumat üçün qaydaları oxuyun.
               </p>
               <button
                 type="button"
@@ -338,7 +339,8 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
               <div>
                 <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2">🤖 AI Modelləri</h4>
                 <ul className="space-y-1.5 ml-1">
-                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Claude Sonnet 4.6 (Expert):</strong> Ən yüksək dəqiqlik və performans. Xüsusilə mürəkkəb xüsusi tələbatlar (custom prompts) və çoxlu kateqoriyalı analizlər üçün ən yaxşı seçimdir.</span></li>
+                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Claude Sonnet 5:</strong> Ən yeni və yüksək performanslı seçim. Mürəkkəb təlimatlar, dərin analitik qiymətləndirmələr və qabaqcıl hesabatlar üçün tövsiyə olunur.</span></li>
+                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Claude Sonnet 4.6:</strong> Stabil və etibarlı seçim. Ən çox istifadə edilən modellərdən biri olmaqla, geniş dəstək və yaxşı balans təqdim edir.</span></li>
                 </ul>
               </div>
 

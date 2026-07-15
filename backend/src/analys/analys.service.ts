@@ -123,7 +123,7 @@ Yalnız və yalnız JSON formatında cavab ver. JSON strukturu:
       throw new BadRequestException('Ən azı bir fayl yükləyin və ya xüsusi təlimat verin.');
     }
 
-    const modelToUse = selectedModel === 'claude-sonnet-4-6' ? 'claude-sonnet-4-6' : 'claude-sonnet-4-6';
+    const modelToUse = selectedModel === 'claude-sonnet-5' ? 'claude-sonnet-5' : 'claude-sonnet-4-6';
 
     if (!hasAnyFiles && hasPrompt) {
       const aiResult = await this.createPromptOnlyTable(customPrompt, modelToUse);
