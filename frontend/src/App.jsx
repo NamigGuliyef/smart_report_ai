@@ -519,24 +519,31 @@ const App = () => {
                                 const hasDiscrepancies = discrepancies.length > 0;
                                 const firstRow = discrepancies[0] || {};
                                 const rowKeys = Object.keys(firstRow);
+                                const isCustomAnalysis = Boolean(audit.metadata?.customPrompt);
 
                                 // Standard key fields
                                 const standardKeys = [
                                   'code', 'product_file1', 'product_file2', 'unit',
                                   'qty_file1', 'qty_file2', 'diff', 'status_recommendation',
-                                  'item', 'issue', 'severity'
+                                  'item', 'issue', 'severity', 'audit_notes'
                                 ];
 
-                                // Check if we have custom keys (indicating a custom prompt layout)
-                                const hasCustomKeys = rowKeys.length > 0 && rowKeys.some(k => !standardKeys.includes(k));
+                                const displayKeys = isCustomAnalysis && audit.metadata?.columnNames?.length
+                                  ? audit.metadata.columnNames.filter((key) => rowKeys.includes(key) || discrepancies.some((row) => row[key] !== undefined))
+                                  : rowKeys;
 
-                                if (hasCustomKeys) {
+                                const tableKeys = displayKeys.length > 0 ? displayKeys : rowKeys;
+
+                                // Custom prompt analyses always render as a structured table
+                                const hasCustomKeys = isCustomAnalysis || (rowKeys.length > 0 && rowKeys.some(k => !standardKeys.includes(k)));
+
+                                if (hasCustomKeys && tableKeys.length > 0) {
                                   return (
                                     <table className="w-full min-w-[1000px] text-left text-xs border border-slate-200 rounded-lg overflow-hidden border-collapse bg-white">
                                       <thead>
                                         <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                                          {rowKeys.map((key) => (
-                                            <th key={key} className="px-3 py-2.5 font-semibold border-r border-slate-200 capitalize">
+                                          {tableKeys.map((key) => (
+                                            <th key={key} className="px-3 py-2.5 font-semibold border-r border-slate-200 capitalize whitespace-nowrap">
                                               {key}
                                             </th>
                                           ))}
@@ -545,8 +552,8 @@ const App = () => {
                                       <tbody className="divide-y divide-slate-200">
                                         {discrepancies.map((row, idx) => (
                                           <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                            {rowKeys.map((key) => (
-                                              <td key={key} className="px-3 py-2.5 text-slate-650 border-r border-slate-200">
+                                            {tableKeys.map((key) => (
+                                              <td key={key} className="px-3 py-2.5 text-slate-650 border-r border-slate-200 whitespace-nowrap">
                                                 {row[key] !== undefined && row[key] !== null ? String(row[key]) : '—'}
                                               </td>
                                             ))}

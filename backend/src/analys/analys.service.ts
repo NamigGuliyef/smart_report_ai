@@ -82,16 +82,24 @@ export class AnalysService {
     return JSON.parse(cleanJson);
   }
 
-  private async createPromptOnlyTable(customPrompt: string, selectedModel: string) {
-    const response = await this.anthropic.messages.create({
-      model: selectedModel,
-      max_tokens: 12000,
-      system: `Sən peşəkar bir hesabat və cədvəl yaradıcısan. İstifadəçinin istəyinə uyğun təmiz, oxunaqlı və strukturlaşdırılmış cədvəl hazırlamalısan.`,
-      messages: [{
-        role: 'user',
-        content: `İstifadəçinin tələbi: ${customPrompt}
+  private buildTableOutputInstructions(
+    customPrompt: string,
+    sourceHeaders: string[] = [],
+  ): string {
+    const headersHint =
+      sourceHeaders.length > 0
+        ? `Mənbə sənədin sütun başlıqları: ${sourceHeaders.join(', ')}. Mümkün olduqda bu başlıqları saxla.`
+        : 'Tələbə uyğun aydın sütun başlıqları seç.';
 
-Yalnız və yalnız JSON formatında cavab ver. JSON strukturu:
+    return `İstifadəçinin tələbi: "${customPrompt}"
+
+Göstərişlər:
+1. Cavabın YALNIZ və YALNIZ təmiz JSON formatında olmalıdır (Markdown blokları, pipe table sintaksisi olmadan).
+2. "discrepancies" massivində HƏR BİR element ayrıca cədvəl sətri olmalıdır — hər sətirdə müvafiq sütun adları ilə dəyərlər olmalıdır.
+3. Bütün məlumatları tək "audit_notes" sahəsində birləşdirmə — bu QADAĞANDIR.
+4. Markdown cədvəl formatı (| sütun | sütun |) və ya mətn paraqrafı şəklində cədvəl QADAĞANDIR.
+5. ${headersHint}
+6. JSON strukturu:
 {
   "context": "Cədvəlin qısa başlığı",
   "discrepancies": [
@@ -99,7 +107,17 @@ Yalnız və yalnız JSON formatında cavab ver. JSON strukturu:
   ],
   "recommendations": ["Tövsiyə 1"],
   "data_quality_score": 100
-}`,
+}`;
+  }
+
+  private async createPromptOnlyTable(customPrompt: string, selectedModel: string) {
+    const response = await this.anthropic.messages.create({
+      model: selectedModel,
+      max_tokens: 12000,
+      system: `Sən peşəkar bir hesabat və cədvəl yaradıcısan. İstifadəçinin istəyinə uyğun təmiz, oxunaqlı və strukturlaşdırılmış cədvəl hazırlamalısan.`,
+      messages: [{
+        role: 'user',
+        content: this.buildTableOutputInstructions(customPrompt),
       }],
     });
 
@@ -184,23 +202,12 @@ Yalnız və yalnız JSON formatında cavab ver. JSON strukturu:
     let systemInstruction = '';
 
     if (customPrompt && customPrompt.trim()) {
-      systemInstruction = `Sən peşəkar bir inventar auditorusan. Sənə ${isComparison ? 'iki cədvəl/sənəd (Sistem və Fiziki)' : 'bir inventar sənədi'} verilir.
-İstifadəçinin xüsusi tələbi var: "${customPrompt}".
+      const allHeaders = [...new Set([...sysHeaders, ...physHeaders])];
+      systemInstruction = `Sən peşəkar bir hesabat və məlumat analitikisans. Sənə ${isComparison ? 'iki cədvəl/sənəd (Sistem və Fiziki)' : 'bir sənəd'} verilir.
+Yüklənmiş sənəddən istifadəçinin tələbinə uyğun məlumatları filter et, strukturlaşdır və cədvəl sətirləri kimi qaytar.
 
-Göstərişlər:
-1. Cavabın YALNIZ və YALNIZ təmiz JSON formatında olmalıdır (Markdown blokları olmadan).
-2. Analiz nəticəsini bu JSON strukturunda qaytar:
-{
-  "context": "Analizin mövzusu",
-  "discrepancies": [
-    {
-      "audit_notes": "Burada uyğunsuzluqla bağlı detallı qeydlər mütləq qeyd olunmalıdır."
-    }
-  ],
-  "recommendations": ["Tələbə uyğun tövsiyə 1"],
-  "data_quality_score": 100
-}
-3. Cavabın sonu "Təbriklər, təhlil bitdi." ilə bitsin.`;
+${this.buildTableOutputInstructions(customPrompt, allHeaders)}
+7. Cavabın sonu "Təbriklər, təhlil bitdi." ilə bitsin.`;
     } else {
       if (isComparison) {
         systemInstruction = `Sən peşəkar bir inventar auditorusan. İki sənədi (Sistem vs Fiziki) qarşılaşdırıb uyğunsuzluqları aşkar etməlisən.
@@ -302,20 +309,32 @@ JSON Strukturu:
       : physData?.length || 0;
     const totalRows = Math.max(sysRowsCount, physRowsCount, 1);
     const discrepanciesCount = aiResult.discrepancies?.length || 0;
-    aiResult.data_quality_score = Math.max(
-      0,
-      Math.min(
-        100,
-        Math.round(((totalRows - discrepanciesCount) / totalRows) * 100),
-      ),
-    );
+    if (customPrompt && customPrompt.trim()) {
+      aiResult.data_quality_score = Math.max(
+        0,
+        Math.min(100, aiResult.data_quality_score ?? 100),
+      );
+    } else {
+      aiResult.data_quality_score = Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round(((totalRows - discrepanciesCount) / totalRows) * 100),
+        ),
+      );
+    }
+
+    const outputColumnNames =
+      customPrompt && customPrompt.trim() && aiResult.discrepancies?.length
+        ? Object.keys(aiResult.discrepancies[0])
+        : [...new Set([...sysHeaders, ...physHeaders])];
 
     // 3. MongoDB-yə yaz
     const auditEntry = new this.analysModel({
       fileName: `${fileName}`,
       dataContent: aiResult,
       metadata: {
-        columnNames: [...new Set([...sysHeaders, ...physHeaders])],
+        columnNames: outputColumnNames,
         user,
         userId,
         customPrompt,
