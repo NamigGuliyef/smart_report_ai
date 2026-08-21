@@ -36,7 +36,7 @@ const App = () => {
   const [toastMessage, setToastMessage] = useState('');
 
   // Model selection
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.6-flash');
 
   // Real data from API responses
   const [auditResult, setAuditResult] = useState(null); // latest API response
@@ -481,7 +481,11 @@ const App = () => {
                               )}
                               {audit.metadata?.model && (
                                 <span className="text-[10px] bg-slate-100/80 text-slate-650 border border-slate-200 px-2.5 py-1 rounded-md font-extrabold">
-                                  {'Claude Sonnet'}
+                                  {audit.metadata.model.includes('3.7')
+                                    ? 'Gemini 3.7 Flash'
+                                    : audit.metadata.model.includes('pro')
+                                    ? 'Gemini 3.6 Pro'
+                                    : 'Gemini 3.6 Flash'}
                                 </span>
                               )}
                               <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-100">

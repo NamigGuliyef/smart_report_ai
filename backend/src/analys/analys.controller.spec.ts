@@ -10,7 +10,7 @@ describe('AnalysController', () => {
     const controller = new AnalysController(service as any);
 
     await expect(
-      controller.uploadFiles(undefined, 'Mənə 3 sətirli satış cədvəli hazırlayın', 'claude-sonnet-4-6'),
+      controller.uploadFiles(undefined, 'Mənə 3 sətirli satış cədvəli hazırlayın', 'gemini-3.6-flash'),
     ).resolves.toEqual({ ok: true });
 
     expect(service.processFiles).toHaveBeenCalledWith(
@@ -19,7 +19,7 @@ describe('AnalysController', () => {
       'Prompt-based Audit',
       'Test User',
       'Mənə 3 sətirli satış cədvəli hazırlayın',
-      'claude-sonnet-4-6',
+      'gemini-3.6-flash',
       undefined,
     );
   });

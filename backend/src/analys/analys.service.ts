@@ -2,16 +2,17 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as ExcelJS from 'exceljs';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { PDFParse } = require('pdf-parse');
 import { Analys } from './model/analys.schema';
 
 @Injectable()
 export class AnalysService {
-  private anthropic = new Anthropic({
+  private ai = new GoogleGenAI({
     apiKey:
-      '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',
+      process.env.GEMINI_API_KEY ||
+      'AQ.Ab8RN6J60CMBobzz9SpnYLgVRfBXC_6aeFG94wkrSEBN0bwbUw',
   });
 
   constructor(
@@ -45,40 +46,105 @@ export class AnalysService {
     }
   }
 
-  // Köməkçi funksiya: Excel-i JSON-a çevirir
+  private getCellValue(cell: ExcelJS.Cell): any {
+    if (!cell || cell.value === null || cell.value === undefined) return '';
+    const val = cell.value;
+    if (typeof val === 'object') {
+      if ('result' in val) return (val as any).result ?? '';
+      if ('text' in val) return (val as any).text ?? '';
+      if ('richText' in val && Array.isArray((val as any).richText)) {
+        return (val as any).richText.map((rt: any) => rt.text).join('');
+      }
+      return String(val);
+    }
+    return val;
+  }
+
+  // Köməkçi funksiya: Excel-i dinamik olaraq JSON-a çevirir (başlıq sətrini avtomatik aşkar edir)
   private async parseExcel(buffer: Buffer) {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as any);
     const worksheet = workbook.worksheets[0];
-    const headers = [];
-    worksheet.getRow(1).eachCell((cell) => headers.push(cell.value));
 
-    const data = [];
-    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      if (rowNumber === 1) return;
-      let rowData = {};
-      row.eachCell((cell, colNumber) => {
-        rowData[headers[colNumber - 1]] = cell.value;
+    const allRows: any[][] = [];
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const rowValues: any[] = [];
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        rowValues[colNumber - 1] = this.getCellValue(cell);
       });
-      data.push(rowData);
+      allRows.push(rowValues);
     });
+
+    if (allRows.length === 0) return { data: [], headers: [] };
+
+    // Ən çox dolu sütunu olan sətri tapaq (ilk 15 sətir daxilində)
+    let headerRowIndex = 0;
+    let maxCols = 0;
+
+    for (let i = 0; i < Math.min(15, allRows.length); i++) {
+      const row = allRows[i];
+      const nonEmptyCols = row.filter((val) => val !== '' && val !== null && val !== undefined).length;
+      if (nonEmptyCols > maxCols) {
+        maxCols = nonEmptyCols;
+        headerRowIndex = i;
+      }
+    }
+
+    const rawHeaders = allRows[headerRowIndex] || [];
+    const headers: string[] = [];
+    
+    rawHeaders.forEach((h, idx) => {
+      const cleanHeader = h ? String(h).trim() : `Sütun_${idx + 1}`;
+      if (headers.includes(cleanHeader)) {
+        headers.push(`${cleanHeader}_${idx + 1}`);
+      } else {
+        headers.push(cleanHeader);
+      }
+    });
+
+    const data: any[] = [];
+    for (let i = headerRowIndex + 1; i < allRows.length; i++) {
+      const row = allRows[i];
+      const hasData = row.some((val) => val !== '' && val !== null && val !== undefined);
+      if (!hasData) continue;
+
+      const rowData: Record<string, any> = {};
+      headers.forEach((header, colIdx) => {
+        const val = row[colIdx];
+        if (val !== undefined && val !== null && val !== '') {
+          rowData[header] = val;
+        }
+      });
+
+      if (Object.keys(rowData).length > 0) {
+        data.push(rowData);
+      }
+    }
+
     return { data, headers };
   }
 
-  private async parseClaudeJsonResponse(response: any) {
-    const textBlock = response.content.find((block: any) => block.type === 'text');
-    if (!textBlock || !textBlock.text) {
-      throw new NotFoundException('Claude cavabında mətn tapılmadı');
+  private mapModelName(selectedModel?: string): string {
+    if (!selectedModel) return 'gemini-3.7-flash';
+    if (selectedModel.includes('3.7')) return 'gemini-3.7-flash';
+    if (selectedModel.includes('pro')) return 'gemini-3.6-pro';
+    if (selectedModel.includes('3.6')) return 'gemini-3.6-flash';
+    return 'gemini-3.7-flash';
+  }
+
+  private parseGeminiJsonResponse(rawText: string) {
+    if (!rawText) {
+      throw new NotFoundException('Gemini cavabında mətn tapılmadı');
     }
 
-    let rawText = textBlock.text.trim();
-    const firstBrace = rawText.indexOf('{');
-    const lastBrace = rawText.lastIndexOf('}');
+    let cleanText = rawText.trim();
+    const firstBrace = cleanText.indexOf('{');
+    const lastBrace = cleanText.lastIndexOf('}');
     if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
-      throw new NotFoundException('Claude cavabında düzgün JSON formatı tapılmadı');
+      throw new NotFoundException('Gemini cavabında düzgün JSON formatı tapılmadı');
     }
 
-    const cleanJson = rawText.substring(firstBrace, lastBrace + 1);
+    const cleanJson = cleanText.substring(firstBrace, lastBrace + 1);
     return JSON.parse(cleanJson);
   }
 
@@ -88,40 +154,72 @@ export class AnalysService {
   ): string {
     const headersHint =
       sourceHeaders.length > 0
-        ? `Mənbə sənədin sütun başlıqları: ${sourceHeaders.join(', ')}. Mümkün olduqda bu başlıqları saxla.`
-        : 'Tələbə uyğun aydın sütun başlıqları seç.';
+        ? `Mənbə sənədindəki mövcud sütunlar: [${sourceHeaders.join(', ')}].`
+        : '';
 
     return `İstifadəçinin tələbi: "${customPrompt}"
 
-Göstərişlər:
-1. Cavabın YALNIZ və YALNIZ təmiz JSON formatında olmalıdır (Markdown blokları, pipe table sintaksisi olmadan).
-2. "discrepancies" massivində HƏR BİR element ayrıca cədvəl sətri olmalıdır — hər sətirdə müvafiq sütun adları ilə dəyərlər olmalıdır.
-3. Bütün məlumatları tək "audit_notes" sahəsində birləşdirmə — bu QADAĞANDIR.
-4. Markdown cədvəl formatı (| sütun | sütun |) və ya mətn paraqrafı şəklində cədvəl QADAĞANDIR.
-5. ${headersHint}
-6. JSON strukturu:
+QAYDALAR:
+1. Cavabın YALNIZ və YALNIZ təmiz JSON formatında olmalıdır.
+2. ${headersHint}
+3. Sənəddən istifadəçinin verdiyi filtrləməyə/istəyə uyğun GƏLƏN BÜTÜN SƏTİRLƏRİ Tap.
+4. "discrepancies" massivində hər bir sətiri obyekt kimi qaytar. Hər obyektdə istifadəçinin istədiyi (və ya sənəddəki) BÜTÜN SÜTUNLAR (məsələn: "Kod", "Nomenklatura", "Vahid", "Miqdar", "Qutu" və s.) ayrı-ayrı açarlar kimi yer almalıdır.
+5. Məlumatları "audit_notes" və ya "status" adında tək sahədə BİRLƏŞDİRMƏ. Hər sütunun öz adı olmalıdır.
+6. JSON strukturu nümunəsi:
 {
-  "context": "Cədvəlin qısa başlığı",
+  "context": "Filtirlənmiş Hesabat",
   "discrepancies": [
-    {"Sütun 1": "Dəyər", "Sütun 2": "Dəyər"}
+    {
+      "Kod": "...",
+      "Nomenklatura": "...",
+      "Vahid": "...",
+      "Miqdar": 0,
+      "Qutu": 0
+    }
   ],
-  "recommendations": ["Tövsiyə 1"],
+  "recommendations": ["Analiz tövsiyəsi"],
   "data_quality_score": 100
 }`;
   }
 
-  private async createPromptOnlyTable(customPrompt: string, selectedModel: string) {
-    const response = await this.anthropic.messages.create({
-      model: selectedModel,
-      max_tokens: 12000,
-      system: `Sən peşəkar bir hesabat və cədvəl yaradıcısan. İstifadəçinin istəyinə uyğun təmiz, oxunaqlı və strukturlaşdırılmış cədvəl hazırlamalısan.`,
-      messages: [{
-        role: 'user',
-        content: this.buildTableOutputInstructions(customPrompt),
-      }],
-    });
+  private async generateContentWithFallback(
+    modelToUse: string,
+    contents: any,
+    config: any,
+  ) {
+    const modelsToTry = [modelToUse, 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const uniqueModels = [...new Set(modelsToTry)];
 
-    return this.parseClaudeJsonResponse(response);
+    let lastError: any;
+    for (const model of uniqueModels) {
+      try {
+        const response = await this.ai.models.generateContent({
+          model,
+          contents,
+          config,
+        });
+        return response;
+      } catch (err: any) {
+        console.warn(`Model ${model} ilə xəta baş verdi, növbəti model sınanılır:`, err?.message || err);
+        lastError = err;
+      }
+    }
+    throw lastError;
+  }
+
+  private async createPromptOnlyTable(customPrompt: string, selectedModel: string) {
+    const modelToUse = this.mapModelName(selectedModel);
+    const response = await this.generateContentWithFallback(
+      modelToUse,
+      this.buildTableOutputInstructions(customPrompt),
+      {
+        systemInstruction:
+          'Sən peşəkar bir hesabat və cədvəl yaradıcısan. İstifadəçinin istəyinə uyğun təmiz, oxunaqlı və strukturlaşdırılmış cədvəl hazırlamalısan.',
+        responseMimeType: 'application/json',
+      },
+    );
+
+    return this.parseGeminiJsonResponse(response.text);
   }
 
   // Əsas funksiya: Faylları emal edir
@@ -141,7 +239,7 @@ Göstərişlər:
       throw new BadRequestException('Ən azı bir fayl yükləyin və ya xüsusi təlimat verin.');
     }
 
-    const modelToUse = selectedModel === 'claude-sonnet-5' ? 'claude-sonnet-5' : 'claude-sonnet-4-6';
+    const modelToUse = this.mapModelName(selectedModel);
 
     if (!hasAnyFiles && hasPrompt) {
       const aiResult = await this.createPromptOnlyTable(customPrompt, modelToUse);
@@ -281,24 +379,16 @@ JSON Strukturu:
         : `Fiziki (Excel): ${JSON.stringify(physData)}`;
     }
 
-    const response = await this.anthropic.messages.create({
-      model: modelToUse,
-      max_tokens: 16000,
-      system: systemInstruction,
-      messages: [{ role: 'user', content: userMessage }],
-    });
+    const response = await this.generateContentWithFallback(
+      modelToUse,
+      userMessage,
+      {
+        systemInstruction: systemInstruction,
+        responseMimeType: 'application/json',
+      },
+    );
 
-    const textBlock = response.content.find((block) => block.type === 'text');
-
-    // Claude cavabını alandan sonra JSON hissəsini tapıb təmizlə
-    let rawText = textBlock['text'].trim();
-    const firstBrace = rawText.indexOf('{');
-    const lastBrace = rawText.lastIndexOf('}');
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
-      throw new NotFoundException('Claude cavabında düzgün JSON formatı tapılmadı');
-    }
-    const cleanJson = rawText.substring(firstBrace, lastBrace + 1);
-    const aiResult = JSON.parse(cleanJson);
+    const aiResult = this.parseGeminiJsonResponse(response.text);
 
     // Mütləq determinizm və dəqiqlik üçün faiz dərəcəsini proqramlaşdırılmış düsturla yenidən hesablayırıq
     const sysRowsCount = sysIsPdf

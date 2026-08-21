@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, ArrowUp, FileText, Info, X } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, ArrowUp, FileText, Info, X, Sparkles, ChevronDown } from 'lucide-react';
 
 const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedModel }) => {
   const [systemFile, setSystemFile] = useState(null);
@@ -7,6 +7,7 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
 
   const [customPrompt, setCustomPrompt] = useState('');
   const [showRulesModal, setShowRulesModal] = useState(false);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
   const systemInputRef = useRef(null);
   const physicalInputRef = useRef(null);
@@ -223,18 +224,99 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
 
               {/* Absolute positioned Controls (Model + Audit Button) */}
               <div className="absolute bottom-3 right-3 left-3 flex items-center justify-end gap-2 pointer-events-none">
-                {/* Model Selector */}
-                <div className="pointer-events-auto flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-sm transition-all group-focus-within:border-indigo-200 max-w-[70%] sm:max-w-none overflow-hidden">
-                  <span className="hidden sm:inline text-[9px] font-bold text-slate-400 uppercase tracking-wider">Model:</span>
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
+                {/* Custom Model Selector */}
+                <div className="pointer-events-auto relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
                     disabled={isAuditing}
-                    className="bg-transparent border-none text-[10px] font-black text-slate-700 focus:ring-0 cursor-pointer py-0 pr-5 pl-0 truncate"
+                    className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-slate-200 hover:border-indigo-400 rounded-xl px-3 py-2 shadow-sm hover:shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 active:scale-95"
                   >
-                    <option value="claude-sonnet-5">Claude Sonnet 5</option>
-                    <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-                  </select>
+                    <Sparkles size={13} className="text-indigo-600 shrink-0" />
+                    <span className="hidden sm:inline text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Model:</span>
+                    <span className="text-[11px] font-bold text-slate-800">
+                      {selectedModel === 'gemini-3.7-flash'
+                        ? 'Gemini 3.7 Flash'
+                        : selectedModel === 'gemini-3.6-pro'
+                        ? 'Gemini 3.6 Pro'
+                        : 'Gemini 3.6 Flash'}
+                    </span>
+                    <ChevronDown size={13} className={`text-slate-400 transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180 text-indigo-600' : ''}`} />
+                  </button>
+
+                  {/* Custom Popover Dropdown Menu */}
+                  {isModelDropdownOpen && (
+                    <>
+                      {/* Backdrop to close on click outside */}
+                      <div 
+                        className="fixed inset-0 z-20" 
+                        onClick={() => setIsModelDropdownOpen(false)} 
+                      />
+                      
+                      <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200/90 rounded-2xl shadow-xl p-1.5 z-30 animate-in fade-in slide-in-from-top-2 duration-150">
+                        <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider px-2.5 py-1 mb-1 border-b border-slate-100">
+                          AI Modelini Seçin
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel('gemini-3.7-flash');
+                            setIsModelDropdownOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                            selectedModel === 'gemini-3.7-flash'
+                              ? 'bg-indigo-50/80 text-indigo-700 font-bold border border-indigo-100/80 shadow-xs'
+                              : 'text-slate-700 font-medium hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${selectedModel === 'gemini-3.7-flash' ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-300'}`} />
+                            <span>Gemini 3.7 Flash</span>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-bold">Ən Yeni</span>
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel('gemini-3.6-flash');
+                            setIsModelDropdownOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all mt-1 ${
+                            selectedModel === 'gemini-3.6-flash'
+                              ? 'bg-indigo-50/80 text-indigo-700 font-bold border border-indigo-100/80 shadow-xs'
+                              : 'text-slate-700 font-medium hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${selectedModel === 'gemini-3.6-flash' ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-300'}`} />
+                            <span>Gemini 3.6 Flash</span>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold">Sürətli</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel('gemini-3.6-pro');
+                            setIsModelDropdownOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all mt-1 ${
+                            selectedModel === 'gemini-3.6-pro'
+                              ? 'bg-indigo-50/80 text-indigo-700 font-bold border border-indigo-100/80 shadow-xs'
+                              : 'text-slate-700 font-medium hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${selectedModel === 'gemini-3.6-pro' ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-300'}`} />
+                            <span>Gemini 3.6 Pro</span>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 font-bold">Güclü</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Audit Send Button */}
@@ -339,8 +421,9 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
               <div>
                 <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2">🤖 AI Modelləri</h4>
                 <ul className="space-y-1.5 ml-1">
-                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Claude Sonnet 5:</strong> Ən yeni və yüksək performanslı seçim. Mürəkkəb təlimatlar, dərin analitik qiymətləndirmələr və qabaqcıl hesabatlar üçün tövsiyə olunur.</span></li>
-                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Claude Sonnet 4.6:</strong> Stabil və etibarlı seçim. Ən çox istifadə edilən modellərdən biri olmaqla, geniş dəstək və yaxşı balans təqdim edir.</span></li>
+                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Gemini 3.7 Flash:</strong> Google DeepMind-ın ən yeni və ildırım sürətli flaqman modeli. Geniş məlumat dəstləri, anlıq filtrləmələr və ən dəqiq cədvəl analizi üçün tövsiyə olunur.</span></li>
+                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Gemini 3.6 Pro:</strong> Yüksək performanslı analitika modeli. Mürəkkəb təlimatlar, dərin qiymətləndirmələr və qabaqcıl hesabatlar üçün istifadə edilir.</span></li>
+                  <li className="flex items-start gap-2"><span className="text-indigo-400 mt-0.5">•</span><span><strong>Gemini 3.6 Flash:</strong> Sürətli və etibarlı seçim. Standart cədvəllər və gündəlik audit analizi üçün optimal balans təqdim edir.</span></li>
                 </ul>
               </div>
 
