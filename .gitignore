@@ -16,3 +16,4 @@ build/
 
 # Antigravity artifacts / temp files
 .gemini/
+.vercel
