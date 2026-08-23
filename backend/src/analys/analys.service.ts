@@ -3,8 +3,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as ExcelJS from 'exceljs';
 import { GoogleGenAI } from '@google/genai';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { PDFParse } = require('pdf-parse');
 import { Analys } from './model/analys.schema';
 
 @Injectable()
@@ -34,6 +32,8 @@ export class AnalysService {
   // Helper to parse PDF text content
   private async parsePdf(buffer: Buffer): Promise<string> {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { PDFParse } = require('pdf-parse');
       const parser = new PDFParse({ data: buffer });
       const result = await parser.getText();
       return result.text || '';
