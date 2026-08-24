@@ -179,7 +179,8 @@ const App = () => {
       setAuditProgress(100);
 
       if (!res.ok) {
-        throw new BadRequestException(`Server xətası: ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Server xətası: ${res.status}`);
       }
 
       const result = await res.json();
@@ -239,7 +240,8 @@ const App = () => {
       });
 
       if (!res.ok) {
-        throw new BadRequestException(`Silinmə uğursuz oldu: ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Silinmə uğursuz oldu: ${res.status}`);
       }
 
       await fetchAllAudits();
