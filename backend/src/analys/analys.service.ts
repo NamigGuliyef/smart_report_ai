@@ -1,16 +1,21 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import { GoogleGenAI } from '@google/genai';
 import { Analys } from './model/analys.schema';
 
 @Injectable()
 export class AnalysService {
   private ai = new GoogleGenAI({
-    apiKey:
-      process.env.GEMINI_API_KEY ||
-      'AQ.Ab8RN6J60CMBobzz9SpnYLgVRfBXC_6aeFG94wkrSEBN0bwbUw',
+    apiKey: process.env.GEMINI_API_KEY,
   });
 
   constructor(
@@ -86,76 +91,227 @@ export class AnalysService {
     return val;
   }
 
-  // Köməkçi funksiya: Excel-i dinamik olaraq JSON-a çevirir (başlıq sətrini avtomatik aşkar edir)
-  private async parseExcel(buffer: Buffer) {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as any);
-    const worksheet = workbook.worksheets[0];
+  // Excel-i müxtəlif layout-lardan oxuyur: title, boş sətir və çoxsəviyyəli başlıqları nəzərə alır.
+  private async parseExcel(
+    buffer: Buffer,
+    requestedSheet?: string,
+    forcedSheetName?: string,
+  ) {
+    const normalizeSheetText = (value: string) =>
+      value
+        .toLocaleLowerCase('az-AZ')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '');
+    const promptText = requestedSheet || '';
+    const normalizedPrompt = normalizeSheetText(promptText);
+    const sheetKeywords = /sheet|vərəq|vereq|səhifə|sehife|tab/i;
+    const ordinalMatch =
+      promptText.match(/(\d+)\s*[- ]?(?:ci|cı|cu|cü)?\s*(?:sheet|vərəq|vereq|səhifə|sehife|tab)/i) ||
+      promptText.match(/(?:sheet|vərəq|vereq|səhifə|sehife|tab)\s*(\d+)/i);
 
-    const allRows: any[][] = [];
-    worksheet.eachRow({ includeEmpty: false }, (row) => {
-      const rowValues: any[] = [];
-      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        rowValues[colNumber - 1] = this.getCellValue(cell);
-      });
-      allRows.push(rowValues);
-    });
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+    const sheetNames = workbook.SheetNames;
+    const mentionedSheetNames = sheetNames
+      .filter((candidate) => normalizedPrompt.includes(normalizeSheetText(candidate)))
+      .sort((first, second) => second.length - first.length);
+
+    if (!forcedSheetName && mentionedSheetNames.length > 1) {
+      const parsedSheets = await Promise.all(
+        mentionedSheetNames.map((name) =>
+          this.parseExcel(buffer, requestedSheet, name),
+        ),
+      );
+      const mergedHeaders = [
+        ...new Set(parsedSheets.flatMap((parsed) => parsed.headers)),
+        '_source_sheet',
+      ];
+      const mergedData = parsedSheets.flatMap((parsed) =>
+        parsed.data.map((row) => ({ ...row, _source_sheet: parsed.sheetName })),
+      );
+      return {
+        data: mergedData,
+        headers: mergedHeaders,
+        sheetName: mentionedSheetNames.join(', '),
+      };
+    }
+
+    let sheetName = forcedSheetName || sheetNames[0];
+    if (!forcedSheetName && ordinalMatch) {
+      const sheetIndex = Number(ordinalMatch[1]) - 1;
+      if (sheetIndex >= 0 && sheetIndex < sheetNames.length) {
+        sheetName = sheetNames[sheetIndex];
+      }
+    } else if (!forcedSheetName && requestedSheet) {
+      const matchingSheets = sheetNames
+        .filter((candidate) => {
+          const normalizedName = normalizeSheetText(candidate);
+          return normalizedName && normalizedPrompt.includes(normalizedName);
+        })
+        .sort((first, second) => second.length - first.length);
+
+      if (matchingSheets.length > 0) {
+        sheetName = matchingSheets[0];
+      } else if (sheetKeywords.test(requestedSheet)) {
+        throw new BadRequestException(
+          `Promptda göstərilən sheet tapılmadı. Mövcud sheet-lər: ${sheetNames.join(', ')}`,
+        );
+      }
+    }
+
+    const allRows = XLSX.utils
+      .sheet_to_json<any[]>(workbook.Sheets[sheetName], {
+        header: 1,
+        raw: true,
+        defval: '',
+        blankrows: true,
+      })
+      .map((row) => row.map((value) => value ?? ''));
 
     if (allRows.length === 0) return { data: [], headers: [] };
 
-    // Ən çox dolu sütunu olan sətri tapaq (ilk 15 sətir daxilində)
-    let headerRowIndex = 0;
-    let maxCols = 0;
+    const isEmpty = (value: any) =>
+      value === '' || value === null || value === undefined;
+    const formatDateParts = (year: number, month: number, day: number) =>
+      `${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
+    const formatDate = (value: Date) =>
+      formatDateParts(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
+    const cellText = (value: any) => {
+      if (isEmpty(value)) return '';
+      if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return formatDate(value);
+      }
+      if (typeof value === 'string') {
+        const isoDateMatch = value.trim().match(/^(\d{4}-\d{2}-\d{2})(?:T|\s|$)/);
+        if (isoDateMatch) {
+          const date = new Date(value.trim());
+          if (!Number.isNaN(date.getTime())) return formatDate(date);
+          const [year, month, day] = isoDateMatch[1].split('-');
+          return `${day}.${month}.${year}`;
+        }
+      }
+      return String(value).trim();
+    };
+    const parseDateOnly = (value: string) => {
+      const match = value.trim().match(/^(\d{2})[./-](\d{2})[./-](\d{4})$/);
+      if (!match) return null;
+      const [, day, month, year] = match;
+      const parsed = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+    const requestedDates = [...promptText.matchAll(/\b(\d{2}[./-]\d{2}[./-]\d{4})\b/g)]
+      .map((match) => parseDateOnly(match[1]))
+      .filter((date): date is Date => Boolean(date));
+    const requestedDateFrom = requestedDates[0];
+    const requestedDateTo = requestedDates[1] || requestedDates[0];
+    const columnCount = Math.max(...allRows.map((row) => row.length), 0);
 
-    for (let i = 0; i < Math.min(15, allRows.length); i++) {
-      const row = allRows[i];
-      const nonEmptyCols = row.filter((val) => val !== '' && val !== null && val !== undefined).length;
-      if (nonEmptyCols > maxCols) {
-        maxCols = nonEmptyCols;
+    // Başlıq üçün mətnli və təkrarsız sətrlərə üstünlük ver; title/data sətrini seçmə.
+    const candidateLimit = Math.min(30, allRows.length);
+    let headerRowIndex = 0;
+    let bestHeaderScore = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < candidateLimit; i++) {
+      const row = allRows[i] || [];
+      const values = row.slice(0, columnCount).map(cellText);
+      const nonEmptyValues = values.filter(Boolean);
+      const textValues = nonEmptyValues.filter((value) => /[^\d\s.,/%()-]/.test(value));
+      const uniqueValues = new Set(nonEmptyValues.map((value) => value.toLowerCase())).size;
+      const nextRowValues = (allRows[i + 1] || []).filter((value) => !isEmpty(value));
+      const score =
+        textValues.length * 4 +
+        uniqueValues * 1.5 +
+        Math.min(nonEmptyValues.length, 12) +
+        Math.min(nextRowValues.length, 8) -
+        (nonEmptyValues.length === 1 ? 8 : 0);
+
+      if (nonEmptyValues.length >= 2 && score > bestHeaderScore) {
+        bestHeaderScore = score;
         headerRowIndex = i;
       }
     }
 
-    const rawHeaders = allRows[headerRowIndex] || [];
+    const rawHeaders = (allRows[headerRowIndex] || []).slice(0, columnCount);
+    const previousHeaderRow = allRows[headerRowIndex - 1] || [];
+    const previousNonEmptyCount = previousHeaderRow.filter((value) => !isEmpty(value)).length;
+    const currentNonEmptyCount = rawHeaders.filter((value) => !isEmpty(value)).length;
     const headers: string[] = [];
-    
-    rawHeaders.forEach((h, idx) => {
-      const cleanHeader = h ? String(h).trim() : `Sütun_${idx + 1}`;
-      if (headers.includes(cleanHeader)) {
-        headers.push(`${cleanHeader}_${idx + 1}`);
-      } else {
-        headers.push(cleanHeader);
+
+    rawHeaders.forEach((header, idx) => {
+      let cleanHeader = cellText(header).replace(/\s+/g, ' ');
+      const parentHeader = cellText(previousHeaderRow[idx]).replace(/\s+/g, ' ');
+      if (!cleanHeader && previousNonEmptyCount >= 2 && currentNonEmptyCount >= previousNonEmptyCount) {
+        cleanHeader = parentHeader;
       }
+      if (!cleanHeader) cleanHeader = `Sütun_${idx + 1}`;
+
+      const duplicateIndex = headers.filter((existing) => existing === cleanHeader).length;
+      headers.push(duplicateIndex ? `${cleanHeader}_${duplicateIndex + 1}` : cleanHeader);
     });
+
+    const dateColumnIndexes = headers
+      .map((header, index) => ({ header: header.toLocaleLowerCase('az-AZ'), index }))
+      .filter(({ header }) =>
+        /(^|[^a-z])(tarix|date|tarixi)([^a-z]|$)/i.test(header),
+      )
+      .map(({ index }) => index);
+    const formatCellValue = (value: any, isDateColumn = false) => {
+      if (!isDateColumn) return cellText(value);
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const excelDate = XLSX.SSF.parse_date_code(value);
+        if (excelDate) {
+          return formatDateParts(excelDate.y, excelDate.m, excelDate.d);
+        }
+      }
+      return cellText(value);
+    };
 
     const data: any[] = [];
     for (let i = headerRowIndex + 1; i < allRows.length; i++) {
-      const row = allRows[i];
-      const hasData = row.some((val) => val !== '' && val !== null && val !== undefined);
+      const row = allRows[i] || [];
+      const hasData = row.some((value) => !isEmpty(value));
       if (!hasData) continue;
+
+      const rowValues = row.slice(0, columnCount).map((value, index) =>
+        formatCellValue(value, dateColumnIndexes.includes(index)),
+      );
+      const matchingHeaderCells = rowValues.filter(
+        (value, index) => value && value.toLowerCase() === headers[index]?.toLowerCase(),
+      ).length;
+      if (matchingHeaderCells >= Math.max(2, Math.ceil(headers.length / 2))) continue;
 
       const rowData: Record<string, any> = {};
       headers.forEach((header, colIdx) => {
-        const val = row[colIdx];
-        if (val !== undefined && val !== null && val !== '') {
-          rowData[header] = val;
-        }
+        rowData[header] = formatCellValue(
+          row[colIdx],
+          dateColumnIndexes.includes(colIdx),
+        );
       });
 
-      if (Object.keys(rowData).length > 0) {
-        data.push(rowData);
+      if (requestedDateFrom && requestedDateTo && dateColumnIndexes.length > 0) {
+        const rowDate = dateColumnIndexes
+          .map((index) => parseDateOnly(formatCellValue(row[index], true)))
+          .find((date): date is Date => Boolean(date));
+        if (!rowDate || rowDate < requestedDateFrom || rowDate > requestedDateTo) {
+          continue;
+        }
       }
+
+      data.push(rowData);
     }
 
-    return { data, headers };
+    return { data, headers, sheetName };
   }
 
   private mapModelName(selectedModel?: string): string {
-    if (!selectedModel) return 'gemini-3.7-flash';
-    if (selectedModel.includes('3.7')) return 'gemini-3.7-flash';
-    if (selectedModel.includes('pro')) return 'gemini-3.6-pro';
-    if (selectedModel.includes('3.6')) return 'gemini-3.6-flash';
-    return 'gemini-3.7-flash';
+    const supportedModels = new Set([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+    ]);
+
+    return selectedModel && supportedModels.has(selectedModel)
+      ? selectedModel
+      : 'gemini-3.6-flash';
   }
 
   private parseGeminiJsonResponse(rawText: string) {
@@ -174,6 +330,44 @@ export class AnalysService {
     return JSON.parse(cleanJson);
   }
 
+  private normalizeOutputDates(value: any): any {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.normalizeOutputDates(item));
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [
+          key,
+          this.normalizeOutputDates(item),
+        ]),
+      );
+    }
+
+    if (typeof value !== 'string') return value;
+
+    const isoDateMatch = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s|$)/);
+    if (isoDateMatch) {
+      const [, year, month, day] = isoDateMatch;
+      return `${day}.${month}.${year}`;
+    }
+
+    return value;
+  }
+
+  private removeInternalFields(result: any): any {
+    if (Array.isArray(result)) {
+      return result.map((item) => this.removeInternalFields(item));
+    }
+    if (!result || typeof result !== 'object') return result;
+
+    return Object.fromEntries(
+      Object.entries(result)
+        .filter(([key]) => key !== '_source_sheet')
+        .map(([key, item]) => [key, this.removeInternalFields(item)]),
+    );
+  }
+
   private buildTableOutputInstructions(
     customPrompt: string,
     sourceHeaders: string[] = [],
@@ -188,10 +382,15 @@ export class AnalysService {
 QAYDALAR:
 1. Cavabın YALNIZ və YALNIZ təmiz JSON formatında olmalıdır.
 2. ${headersHint}
-3. Sənəddən istifadəçinin verdiyi filtrləməyə/istəyə uyğun GƏLƏN BÜTÜN SƏTİRLƏRİ Tap.
-4. "discrepancies" massivində hər bir sətiri obyekt kimi qaytar. Hər obyektdə istifadəçinin istədiyi (və ya sənəddəki) BÜTÜN SÜTUNLAR (məsələn: "Kod", "Nomenklatura", "Vahid", "Miqdar", "Qutu" və s.) ayrı-ayrı açarlar kimi yer almalıdır.
-5. Məlumatları "audit_notes" və ya "status" adında tək sahədə BİRLƏŞDİRMƏ. Hər sütunun öz adı olmalıdır.
-6. JSON strukturu nümunəsi:
+3. Cədvəlin sütun adlarını əvvəlcədən təxmin etmə və standart sütun sxemi qəbul etmə. Sütunlar istənilən adda, sayda və ardıcıllıqda ola bilər.
+4. Başlıqdan əvvəlki title, izah, qeyd və boş sətrləri data kimi qəbul etmə; yekun və qeyd sətrlərini yalnız istifadəçi istədikdə nəzərə al.
+5. Backend tərəfindən tarix aralığına görə əvvəlcədən süzülmüş bütün sətirləri, xüsusilə başlanğıc və son sərhəd tarixlərini, heç birini buraxmadan qaytar. Sənəddən istifadəçinin verdiyi filtrləməyə/istəyə uyğun GƏLƏN BÜTÜN SƏTİRLƏRİ Tap və mövcud bütün sütunları qoru.
+6. "discrepancies" massivində hər sətri obyekt kimi qaytar. Sütun adlarını sənəddəki formada saxla; boş hüceyrələri başqa sütuna keçirmə və məlumat uydurma.
+7. Məlumatları "audit_notes" və ya "status" adında tək sahədə birləşdirmə. Sənəddəki hər sütun ayrıca açar olmalıdır.
+8. Tarix sütunlarındakı bütün tarixləri yalnız gün.ay.il formatında (DD.MM.YYYY) qaytar. ISO formatı, "T" simvolu, saat, dəqiqə və saniyə yazma.
+9. Eyni inventar bir neçə sətrdədirsə, sətrləri birləşdirmə, cəmləmə və təkrarları silmə. Mənbədə neçə uyğun sətir varsa, nəticədə də eyni sayda ayrıca sətir qaytar.
+10. _source_sheet daxili texniki sahədir; onu nəticə sütunu kimi qaytarma.
+11. JSON strukturu nümunəsi:
 {
   "context": "Filtirlənmiş Hesabat",
   "discrepancies": [
@@ -213,23 +412,68 @@ QAYDALAR:
     contents: any,
     config: any,
   ) {
-    const modelsToTry = [modelToUse, 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const configuredModels = (process.env.GEMINI_MODELS || '')
+      .split(',')
+      .map((model) => model.trim())
+      .filter(Boolean);
+    const modelsToTry = [modelToUse, ...configuredModels];
     const uniqueModels = [...new Set(modelsToTry)];
 
     let lastError: any;
+    let quotaError: any;
+    let unavailableError: any;
     for (const model of uniqueModels) {
-      try {
-        const response = await this.ai.models.generateContent({
-          model,
-          contents,
-          config,
-        });
-        return response;
-      } catch (err: any) {
-        console.warn(`Model ${model} ilə xəta baş verdi, növbəti model sınanılır:`, err?.message || err);
-        lastError = err;
+      for (let attempt = 0; attempt < 1; attempt++) {
+        try {
+          const response = await this.ai.models.generateContent({
+            model,
+            contents,
+            config,
+          });
+          return response;
+        } catch (err: any) {
+          lastError = err;
+          const message = err?.message || String(err);
+          const isUnavailable = err?.status === 503 || message.includes('"code":503');
+          const isNotFound = err?.status === 404 || message.includes('"code":404');
+          const isQuotaExceeded =
+            err?.status === 429 ||
+            message.includes('"code":429') ||
+            message.includes('RESOURCE_EXHAUSTED') ||
+            message.includes('Quota exceeded');
+
+          if (isQuotaExceeded) {
+            quotaError = err;
+            break;
+          }
+
+          if (isUnavailable) {
+            unavailableError = err;
+            console.warn(`Model ${model} əlçatmazdır, alternativ model yoxlanılır.`);
+            break;
+          }
+
+          if (isNotFound || !isUnavailable) break;
+        }
       }
+
+      console.warn(`Model ${model} istifadə edilə bilmədi, növbəti model sınanılır.`);
     }
+
+    if (quotaError) {
+      throw new HttpException(
+        'Gemini API kvotası bitib. Google AI Studio-da billing/quota limitlərini yoxlayın və ya Flash modelindən istifadə edin.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    if (unavailableError) {
+      throw new HttpException(
+        'Gemini modeli hazırda yüksək tələbat səbəbilə müvəqqəti əlçatmazdır. Bu quota xətası deyil; bir neçə dəqiqə sonra yenidən cəhd edin.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
     throw lastError;
   }
 
@@ -245,7 +489,9 @@ QAYDALAR:
       },
     );
 
-    return this.parseGeminiJsonResponse(response.text);
+    return this.removeInternalFields(
+      this.normalizeOutputDates(this.parseGeminiJsonResponse(response.text)),
+    );
   }
 
   // Əsas funksiya: Faylları emal edir
@@ -290,6 +536,7 @@ QAYDALAR:
     // 1. Faylları parçala
     let sysData: any[] = [];
     let sysHeaders: string[] = [];
+    let sysSheetName = '';
     let sysIsPdf = false;
     let sysPdfText = '';
 
@@ -298,14 +545,16 @@ QAYDALAR:
         sysIsPdf = true;
         sysPdfText = await this.parsePdf(sysBuffer);
       } else {
-        const parsed = await this.parseExcel(sysBuffer);
+        const parsed = await this.parseExcel(sysBuffer, customPrompt);
         sysData = parsed.data || [];
         sysHeaders = parsed.headers || [];
+        sysSheetName = parsed.sheetName || '';
       }
     }
 
     let physData: any[] = [];
     let physHeaders: string[] = [];
+    let physSheetName = '';
     let physIsPdf = false;
     let physPdfText = '';
 
@@ -314,9 +563,10 @@ QAYDALAR:
         physIsPdf = true;
         physPdfText = await this.parsePdf(physBuffer);
       } else {
-        const parsed = await this.parseExcel(physBuffer);
+        const parsed = await this.parseExcel(physBuffer, customPrompt);
         physData = parsed.data || [];
         physHeaders = parsed.headers || [];
+        physSheetName = parsed.sheetName || '';
       }
     }
 
@@ -390,19 +640,19 @@ JSON Strukturu:
     if (sysBuffer && physBuffer) {
       const sysStr = sysIsPdf
         ? `Sistem (PDF): ${sysPdfText}`
-        : `Sistem (Excel): ${JSON.stringify(sysData)}`;
+        : `Sistem (Excel, sheet: ${sysSheetName}): ${JSON.stringify(sysData)}`;
       const physStr = physIsPdf
         ? `Fiziki (PDF): ${physPdfText}`
-        : `Fiziki (Excel): ${JSON.stringify(physData)}`;
+        : `Fiziki (Excel, sheet: ${physSheetName}): ${JSON.stringify(physData)}`;
       userMessage = `${sysStr}\n\n${physStr}`;
     } else if (sysBuffer) {
       userMessage = sysIsPdf
         ? `Sistem (PDF): ${sysPdfText}`
-        : `Sistem (Excel): ${JSON.stringify(sysData)}`;
+        : `Sistem (Excel, sheet: ${sysSheetName}): ${JSON.stringify(sysData)}`;
     } else {
       userMessage = physIsPdf
         ? `Fiziki (PDF): ${physPdfText}`
-        : `Fiziki (Excel): ${JSON.stringify(physData)}`;
+        : `Fiziki (Excel, sheet: ${physSheetName}): ${JSON.stringify(physData)}`;
     }
 
     const response = await this.generateContentWithFallback(
@@ -414,7 +664,9 @@ JSON Strukturu:
       },
     );
 
-    const aiResult = this.parseGeminiJsonResponse(response.text);
+    const aiResult = this.removeInternalFields(
+      this.normalizeOutputDates(this.parseGeminiJsonResponse(response.text)),
+    );
 
     // Mütləq determinizm və dəqiqlik üçün faiz dərəcəsini proqramlaşdırılmış düsturla yenidən hesablayırıq
     const sysRowsCount = sysIsPdf

@@ -230,16 +230,12 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
                     type="button"
                     onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
                     disabled={isAuditing}
-                    className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-slate-200 hover:border-indigo-400 rounded-xl px-3 py-2 shadow-sm hover:shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 active:scale-95"
+                    className="flex w-[190px] sm:w-[240px] items-center justify-between gap-1.5 bg-white/95 backdrop-blur-md border border-slate-200 hover:border-indigo-400 rounded-xl px-3 py-2 shadow-sm hover:shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 active:scale-95"
                   >
                     <Sparkles size={13} className="text-indigo-600 shrink-0" />
                     <span className="hidden sm:inline text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Model:</span>
-                    <span className="text-[11px] font-bold text-slate-800">
-                      {selectedModel === 'gemini-3.7-flash'
-                        ? 'Gemini 3.7 Flash'
-                        : selectedModel === 'gemini-3.6-pro'
-                        ? 'Gemini 3.6 Pro'
-                        : 'Gemini 3.6 Flash'}
+                    <span className="truncate text-[11px] font-bold text-slate-800">
+                      {selectedModel.replace('gemini-', 'Gemini ').replace('-', ' ')}
                     </span>
                     <ChevronDown size={13} className={`text-slate-400 transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180 text-indigo-600' : ''}`} />
                   </button>
@@ -253,30 +249,11 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
                         onClick={() => setIsModelDropdownOpen(false)} 
                       />
                       
-                      <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200/90 rounded-2xl shadow-xl p-1.5 z-30 animate-in fade-in slide-in-from-top-2 duration-150">
+                      <div className="absolute right-0 top-full mt-2 w-[190px] sm:w-[240px] max-h-40 overflow-y-auto bg-white border border-slate-200/90 rounded-2xl shadow-xl p-1.5 z-30 animate-in fade-in slide-in-from-top-2 duration-150">
                         <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider px-2.5 py-1 mb-1 border-b border-slate-100">
                           AI Modelini Seçin
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedModel('gemini-3.7-flash');
-                            setIsModelDropdownOpen(false);
-                          }}
-                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                            selectedModel === 'gemini-3.7-flash'
-                              ? 'bg-indigo-50/80 text-indigo-700 font-bold border border-indigo-100/80 shadow-xs'
-                              : 'text-slate-700 font-medium hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${selectedModel === 'gemini-3.7-flash' ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-300'}`} />
-                            <span>Gemini 3.7 Flash</span>
-                          </div>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-bold">Ən Yeni</span>
-                        </button>
-                        
                         <button
                           type="button"
                           onClick={() => {
@@ -299,20 +276,39 @@ const UploadSection = ({ onAuditStart, isAuditing, selectedModel, setSelectedMod
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedModel('gemini-3.6-pro');
+                            setSelectedModel('gemini-3.5-flash');
                             setIsModelDropdownOpen(false);
                           }}
                           className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all mt-1 ${
-                            selectedModel === 'gemini-3.6-pro'
+                            selectedModel === 'gemini-3.5-flash'
                               ? 'bg-indigo-50/80 text-indigo-700 font-bold border border-indigo-100/80 shadow-xs'
                               : 'text-slate-700 font-medium hover:bg-slate-50'
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${selectedModel === 'gemini-3.6-pro' ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-300'}`} />
-                            <span>Gemini 3.6 Pro</span>
+                            <div className={`w-2 h-2 rounded-full ${selectedModel === 'gemini-3.5-flash' ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-300'}`} />
+                            <span>Gemini 3.5 Flash</span>
                           </div>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 font-bold">Güclü</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold">Sürətli</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel('gemini-3.5-flash-lite');
+                            setIsModelDropdownOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all mt-1 ${
+                            selectedModel === 'gemini-3.5-flash-lite'
+                              ? 'bg-indigo-50/80 text-indigo-700 font-bold border border-indigo-100/80 shadow-xs'
+                              : 'text-slate-700 font-medium hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${selectedModel === 'gemini-3.5-flash-lite' ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-300'}`} />
+                            <span>Gemini 3.5 Flash Lite</span>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-bold">Lite</span>
                         </button>
                       </div>
                     </>
